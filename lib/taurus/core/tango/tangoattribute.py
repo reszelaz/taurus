@@ -287,6 +287,7 @@ class TangoAttribute(TaurusAttribute):
         # current event subscription state
         self.__subscription_state = SubscriptionState.Unsubscribed
         self.__subscription_event = threading.Event()
+        self.__subscription_cfg_state = SubscriptionState.Unsubscribed
 
         # the parent's HW object (the PyTango Device obj)
         self.__dev_hw_obj = None
@@ -326,8 +327,8 @@ class TangoAttribute(TaurusAttribute):
 
     def cleanUp(self):
         self.trace("[TangoAttribute] cleanUp")
-        self._unsubscribeConfEvents()
-        self._unsubscribeChangeEvents()
+        self._finalUnsubscribeConfEvents()
+        self._finalUnsubscribeChangeEvents()
         TaurusAttribute.cleanUp(self)
         self.__dev_hw_obj = None
         self._pytango_attrinfoex = None
@@ -732,6 +733,27 @@ class TangoAttribute(TaurusAttribute):
         self.disablePolling()
         self.__subscription_state = SubscriptionState.Unsubscribed
 
+    def _finalUnsubscribeChangeEvents(self):
+        # Careful in this method: This is intended to be executed in the cleanUp
+        # so we should not access external objects from the factory, like the
+        # parent object
+
+        if self.__dev_hw_obj is not None and self.__chg_evt_id is not None:
+            self.trace("Unsubscribing to change events (ID=%d)",
+                       self.__chg_evt_id)
+            try:
+                self.__chg_evt_id = None
+            except PyTango.DevFailed as df:
+                if len(df.args) and df.args[0].reason == 'API_EventNotFound':
+                    # probably tango shutdown has been initiated before and
+                    # it unsubscribed from events itself
+                    pass
+                else:
+                    self.debug("Failed: %s", df.args[0].desc)
+                    self.trace(str(df))
+        self.disablePolling()
+        self.__subscription_state = SubscriptionState.Unsubscribed
+
     def _subscribeConfEvents(self):
         """ Enable subscription to the attribute configuration events."""
         self.trace("Subscribing to configuration events...")
@@ -756,6 +778,7 @@ class TangoAttribute(TaurusAttribute):
             # connects to self.push_event callback
             # TODO: _BoundMethodWeakrefWithCall is used as workaround for
             # PyTango #185 issue
+            self.__subscription_cfg_state = SubscriptionState.Subscribing
             self.__cfg_evt_id = self.__dev_hw_obj.subscribe_event(
                 attr_name,
                 PyTango.EventType.ATTR_CONF_EVENT,
@@ -789,7 +812,22 @@ class TangoAttribute(TaurusAttribute):
             except PyTango.DevFailed as e:
                 self.debug("Error trying to unsubscribe configuration events")
                 self.trace(str(e))
-                
+
+    def _finalUnsubscribeConfEvents(self):
+        # Careful in this method: This is intended to be executed in the cleanUp
+        # so we should not access external objects from the factory, like the
+        # parent object
+
+        if self.__cfg_evt_id is not None and self.__dev_hw_obj is not None:
+            self.trace("Unsubscribing to configuration events (ID=%s)",
+                       str(self.__cfg_evt_id))
+            try:
+                self.__cfg_evt_id = None
+                self.__subscription_cfg_state = SubscriptionState.Unsubscribed
+            except PyTango.DevFailed as e:
+                self.debug("Error trying to unsubscribe configuration events")
+                self.trace(str(e))
+
     def subscribePendingEvents(self):
         """ Execute delayed event subscription
         """                
@@ -804,6 +842,13 @@ class TangoAttribute(TaurusAttribute):
         It propagates the event to listeners and delegates other tasks to
         specific handlers for different event types.
         """
+        if isinstance(event, PyTango.AttrConfEventData):
+            if self.__subscription_cfg_state == SubscriptionState.Unsubscribed:
+                return
+        else:
+            if self.__subscription_state == SubscriptionState.Unsubscribed:
+                return
+
         with self.__read_lock:
 
             # if it is a configuration event
@@ -895,6 +940,7 @@ class TangoAttribute(TaurusAttribute):
                  evt_value is a TaurusValue, an Exception, or None.
         """
         if not event.err:
+            self.__subscription_cfg_state = SubscriptionState.Subscribed
             # update conf-related attributes
             self._decodeAttrInfoEx(event.attr_conf)
             # make sure that there is a self.__attr_value
