@@ -48,7 +48,7 @@ from taurus.core.taurusbasetypes import (TaurusEventType,
                                          DataFormat, DataType)
 from taurus.core.taurusoperation import WriteAttrOperation
 from taurus.core.util.event import EventListener, _BoundMethodWeakrefWithCall
-from taurus.core.util.log import (debug, taurus4_deprecation,
+from taurus.core.util.log import (debug, taurus4_deprecation, trace,
                                   deprecation_decorator)
 from taurus.core.util.threadpool import ThreadPool
 
@@ -73,8 +73,17 @@ __thread_pool_lock = threading.Lock()
 __thread_pool = None
 
 
-def unsubscribe_event(dev_proxy, event_id):
-    dev_proxy.unsubscribe_event(event_id)
+def _unsubscribe_event(dev_proxy, event_id):
+    try:
+        dev_proxy.unsubscribe_event(event_id)
+    except PyTango.DevFailed as df:
+        if len(df.args) and df.args[0].reason == 'API_EventNotFound':
+            # probably tango shutdown has been initiated before and
+            # it unsubscribed from events itself
+            pass
+        else:
+            debug("Error trying to unsubscribe configuration events")
+            trace(str(df))
 
 
 def get_thread_pool():
@@ -298,6 +307,7 @@ class TangoAttribute(TaurusAttribute):
     _description = 'A Tango Attribute'
 
     def __init__(self, name='', parent=None, **kwargs):
+        self._zombie = False
         # the last attribute value
         self.__attr_value = None
 
@@ -349,13 +359,18 @@ class TangoAttribute(TaurusAttribute):
         if self.factory().is_tango_subscribe_enabled():
             self._subscribeConfEvents()
 
+    def setZombie(self, zombie=True):
+        print("setZombie", self.getFullName(), zombie)
+        self._zombie = zombie
+
     def __del__(self):
+        self._zombie = True
         self.cleanUp()
 
     def cleanUp(self):
         self.trace("[TangoAttribute] cleanUp")
-        self._unsubscribeConfEvents()
-        self._unsubscribeChangeEvents()
+        self._finalUnsubscribeConfEvents()
+        self._finalUnsubscribeChangeEvents()
         TaurusAttribute.cleanUp(self)
         self.__dev_hw_obj = None
         self._pytango_attrinfoex = None
@@ -682,7 +697,7 @@ class TangoAttribute(TaurusAttribute):
         return self.__subscription_state == SubscriptionState.Subscribed
     
     def getSubscriptionState(self):
-        return self.__subscription_state    
+        return self.__subscription_state
 
     def _process_event_exception(self, ex):
         pass
@@ -739,10 +754,6 @@ class TangoAttribute(TaurusAttribute):
         return self.__chg_evt_id
                 
     def _unsubscribeChangeEvents(self):
-        # Careful in this method: This is intended to be executed in the cleanUp
-        # so we should not access external objects from the factory, like the
-        # parent object
-        
         if self.__dev_hw_obj is not None and self.__chg_evt_id is not None:
             self.trace("Unsubscribing to change events (ID=%d)",
                        self.__chg_evt_id)
@@ -759,6 +770,22 @@ class TangoAttribute(TaurusAttribute):
                     self.trace(str(df))
         self.disablePolling()
         self.__subscription_state = SubscriptionState.Unsubscribed
+
+    def _finalUnsubscribeChangeEvents(self):
+        # Careful in this method: This is intended to be executed in the cleanUp
+        # so we should not access external objects from the factory, like the
+        # parent object
+
+        if self.__dev_hw_obj is not None and self.__chg_evt_id is not None:
+            self.trace("Postponing unsubscribe to change events (ID=%d)",
+                       self.__chg_evt_id)
+            get_thread_pool().add(_unsubscribe_event,
+                                  None,
+                                  self.__dev_hw_obj,
+                                  self.__chg_evt_id)
+            self.__subscription_state = SubscriptionState.PostponedUnsubscribe
+            self.__chg_evt_id = None
+        # self.disablePolling()  # TODO: why it is here?
 
     def _subscribeConfEvents(self):
         """ Enable subscription to the attribute configuration events."""
@@ -805,10 +832,6 @@ class TangoAttribute(TaurusAttribute):
                 self.traceback()
                 
     def _unsubscribeConfEvents(self):
-        # Careful in this method: This is intended to be executed in the cleanUp
-        # so we should not access external objects from the factory, like the
-        # parent object
-        
         if self.__cfg_evt_id is not None and self.__dev_hw_obj is not None:
             self.trace("Unsubscribing to configuration events (ID=%s)",
                        str(self.__cfg_evt_id))
@@ -818,7 +841,22 @@ class TangoAttribute(TaurusAttribute):
             except PyTango.DevFailed as e:
                 self.debug("Error trying to unsubscribe configuration events")
                 self.trace(str(e))
-                
+
+    def _finalUnsubscribeConfEvents(self):
+        # Careful in this method: This is intended to be executed in the cleanUp
+        # so we should not access external objects from the factory, like the
+        # parent object
+
+        if self.__cfg_evt_id is not None and self.__dev_hw_obj is not None:
+            self.trace("Postponing unsubscribe to configuration events (ID=%s)",
+                       str(self.__cfg_evt_id))
+            get_thread_pool().add(_unsubscribe_event,
+                                  None,
+                                  self.__dev_hw_obj,
+                                  self.__cfg_evt_id)
+            self.__subscription_cfg_state = SubscriptionState.PostponedUnsubscribe
+            self.__cfg_evt_id = None
+
     def subscribePendingEvents(self):
         """ Execute delayed event subscription
         """                
@@ -833,6 +871,9 @@ class TangoAttribute(TaurusAttribute):
         It propagates the event to listeners and delegates other tasks to
         specific handlers for different event types.
         """
+        if self._zombie == True:
+            return
+
         with self.__read_lock:
 
             # if it is a configuration event

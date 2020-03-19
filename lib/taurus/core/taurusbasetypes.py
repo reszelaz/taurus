@@ -169,7 +169,8 @@ SubscriptionState = Enumeration(
         "Unsubscribed",
         "Subscribing",
         "Subscribed",
-        "PendingSubscribe"
+        "PendingSubscribe",
+        "PostponedUnsubscribe"
     ))
 
 
