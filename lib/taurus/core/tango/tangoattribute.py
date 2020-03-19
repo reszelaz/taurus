@@ -50,6 +50,7 @@ from taurus.core.taurusoperation import WriteAttrOperation
 from taurus.core.util.event import EventListener, _BoundMethodWeakrefWithCall
 from taurus.core.util.log import (debug, taurus4_deprecation,
                                   deprecation_decorator)
+from taurus.core.util.threadpool import ThreadPool
 
 from taurus.core.tango.enums import (EVENT_TO_POLLING_EXCEPTIONS,
                                      FROM_TANGO_TO_NUMPY_TYPE,
@@ -66,6 +67,32 @@ from .util.tango_taurus import (description_from_tango,
 __all__ = ["TangoAttribute", "TangoAttributeEventListener", "TangoAttrValue"]
 
 __docformat__ = "restructuredtext"
+
+
+__thread_pool_lock = threading.Lock()
+__thread_pool = None
+
+
+def unsubscribe_event(dev_proxy, event_id):
+    dev_proxy.unsubscribe_event(event_id)
+
+
+def get_thread_pool():
+    """Returns the global pool of threads for unsubscribing from events
+
+    :return: the global pool of threads object
+    :rtype: taurus.core.util.ThreadPool"""
+
+    global __thread_pool
+
+    if __thread_pool:
+        return __thread_pool
+
+    global __thread_pool_lock
+    with __thread_pool_lock:
+        if __thread_pool is None:
+            __thread_pool = ThreadPool(name="UnsubTH", Psize=1, Qsize=1000)
+        return __thread_pool
 
 
 class TangoAttrValue(TaurusAttrValue):

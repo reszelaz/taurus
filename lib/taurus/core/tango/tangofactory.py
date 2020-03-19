@@ -51,7 +51,7 @@ from taurus.core.util.singleton import Singleton
 from taurus.core.util.containers import CaselessWeakValueDict, CaselessDict
 
 from .tangodatabase import TangoAuthority
-from .tangoattribute import TangoAttribute
+from .tangoattribute import TangoAttribute, get_thread_pool
 from .tangodevice import TangoDevice
 
 _Authority = TangoAuthority
@@ -149,6 +149,7 @@ class TangoFactory(Singleton, TaurusFactory, Logger):
             v.cleanUp()
         for k, v in self.tango_db.items():
             v.cleanUp()
+        get_thread_pool().join()
         self.reInit()
 
     def getExistingAttributes(self):
