@@ -332,7 +332,7 @@ class TangoFactory(Singleton, TaurusFactory, Logger):
         d = self.tango_devs.get(dev_name)
         if d is None:
             d = self.tango_alias_devs.get(dev_name)
-        if d is not None:
+        if d is not None and not d._zombie:
             return d
 
         validator = _Device.getNameValidator()
@@ -382,7 +382,7 @@ class TangoFactory(Singleton, TaurusFactory, Logger):
                    alias is invalid.
         """
         attr = self.tango_attrs.get(attr_name)
-        if attr is not None:
+        if attr is not None and not attr._zombie:
             return attr
 
         # Simple approach did not work. Lets build a proper device name
