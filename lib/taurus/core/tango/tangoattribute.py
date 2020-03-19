@@ -314,6 +314,7 @@ class TangoAttribute(TaurusAttribute):
         # current event subscription state
         self.__subscription_state = SubscriptionState.Unsubscribed
         self.__subscription_event = threading.Event()
+        self.__subscription_cfg_state = SubscriptionState.Unsubscribed
 
         # the parent's HW object (the PyTango Device obj)
         self.__dev_hw_obj = None
@@ -783,6 +784,7 @@ class TangoAttribute(TaurusAttribute):
             # connects to self.push_event callback
             # TODO: _BoundMethodWeakrefWithCall is used as workaround for
             # PyTango #185 issue
+            self.__subscription_cfg_state = SubscriptionState.Subscribing
             self.__cfg_evt_id = self.__dev_hw_obj.subscribe_event(
                 attr_name,
                 PyTango.EventType.ATTR_CONF_EVENT,
@@ -922,6 +924,7 @@ class TangoAttribute(TaurusAttribute):
                  evt_value is a TaurusValue, an Exception, or None.
         """
         if not event.err:
+            self.__subscription_cfg_state = SubscriptionState.Subscribed
             # update conf-related attributes
             self._decodeAttrInfoEx(event.attr_conf)
             # make sure that there is a self.__attr_value
