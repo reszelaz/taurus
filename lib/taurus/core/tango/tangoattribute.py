@@ -82,7 +82,7 @@ def _unsubscribe_event(dev_proxy, event_id):
             # it unsubscribed from events itself
             pass
         else:
-            debug("Error trying to unsubscribe configuration events")
+            debug("Error trying to unsubscribe events")
             trace(str(df))
 
 
