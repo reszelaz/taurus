@@ -51,7 +51,7 @@ from taurus.core.util.singleton import Singleton
 from taurus.core.util.containers import CaselessWeakValueDict, CaselessDict
 
 from .tangodatabase import TangoAuthority
-from .tangoattribute import TangoAttribute
+from .tangoattribute import TangoAttribute, _empty_unsub_queue
 from .tangodevice import TangoDevice
 
 _Authority = TangoAuthority
@@ -149,6 +149,7 @@ class TangoFactory(Singleton, TaurusFactory, Logger):
             v.cleanUp()
         for k, v in self.tango_db.items():
             v.cleanUp()
+        _empty_unsub_queue()
         self.reInit()
 
     def getExistingAttributes(self):
@@ -381,7 +382,7 @@ class TangoFactory(Singleton, TaurusFactory, Logger):
                    alias is invalid.
         """
         attr = self.tango_attrs.get(attr_name)
-        if attr is not None:
+        if attr is not None and not attr._zombie:
             return attr
 
         # Simple approach did not work. Lets build a proper device name
