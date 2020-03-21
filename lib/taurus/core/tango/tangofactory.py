@@ -332,7 +332,7 @@ class TangoFactory(Singleton, TaurusFactory, Logger):
         d = self.tango_devs.get(dev_name)
         if d is None:
             d = self.tango_alias_devs.get(dev_name)
-        if d is not None:
+        if d is not None and not d._zombie:
             return d
 
         validator = _Device.getNameValidator()

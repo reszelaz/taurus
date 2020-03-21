@@ -70,6 +70,7 @@ class TangoDevice(TaurusDevice):
         self._deviceStateObj = None
         # TODO reimplement using the new codification
         self._deviceState = TaurusDevState.Undefined
+        self._zombie = False
 
     # Export the DeviceProxy interface into this object.
     # This way we can call for example read_attribute on an object of this
@@ -103,6 +104,12 @@ class TangoDevice(TaurusDevice):
         on the device"""
         attr = self.getAttribute(key)
         return attr.write(value)
+
+    def setZombie(self, zombie=True):
+        self._zombie = zombie
+        if self._deviceStateObj is None:
+            return
+        self._deviceStateObj.setZombie(zombie)
 
     def getAttribute(self, attrname):
         """Returns the attribute object given its name"""
