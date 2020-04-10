@@ -38,9 +38,9 @@ T_FORM_CUSTOM_WIDGET_MAP = \
     {'SimuMotor': ('sardana.taurus.qt.qtgui.extra_pool.PoolMotorTV', (), {}),
      'Motor': ('sardana.taurus.qt.qtgui.extra_pool.PoolMotorTV', (), {}),
      'PseudoMotor': ('sardana.taurus.qt.qtgui.extra_pool.PoolMotorTV', (), {}),
-     'PseudoCounter': ('sardana.taurus.qt.qtgui.extra_pool.PoolChannelTV', (), {}),
+     'PseudoCounter': ('sardana.taurus.qt.qtgui.extra_pool._PoolChannelTV', (), {}),
      'CTExpChannel': ('sardana.taurus.qt.qtgui.extra_pool.PoolChannelTV', (), {}),
-     'ZeroDExpChannel': ('sardana.taurus.qt.qtgui.extra_pool.PoolChannelTV', (), {}),
+     'ZeroDExpChannel': ('sardana.taurus.qt.qtgui.extra_pool._PoolChannelTV', (), {}),
      'OneDExpChannel': ('sardana.taurus.qt.qtgui.extra_pool.PoolChannelTV', (), {}),
      'TwoDExpChannel': ('sardana.taurus.qt.qtgui.extra_pool.PoolChannelTV', (), {}),
      'IORegister': ('sardana.taurus.qt.qtgui.extra_pool.PoolIORegisterTV', (), {})
